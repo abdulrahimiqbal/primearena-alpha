@@ -1,0 +1,17 @@
+name: primearena_residual_rank_hard_readiness_v1
+thresholds:
+  trained_top1_accuracy_min: 0.10
+  trained_mean_reciprocal_rank_min: 0.20
+  trained_mrr_delta_vs_nearest_min: 0.0
+  trained_mrr_delta_vs_input_only_min: 0.0
+  trained_mrr_delta_vs_random_model_min: 0.0
+  counterfactual_pair_accuracy_min: 0.50
+  nearest_fail_rate_min: 0.50
+requirements:
+  residual_rank_mode: true
+  residual_rank_hard_mode: true
+  residual_rank_hard_solver_uncertainty: true
+  residual_rank_hide_small_mod_features: true
+notes:
+  - "ResidualPrimeRank-Hard oversamples intervals where nearest/input-only/simple survivor-order baselines are weak."
+  - "Passing this benchmark supports a residual signal claim only against the included controls; it is not a discovery claim."

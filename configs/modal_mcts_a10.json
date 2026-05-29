@@ -1,0 +1,48 @@
+{
+  "env": {
+    "n_min": 10000,
+    "n_max": 10000000,
+    "window_size": 128,
+    "max_steps": 100,
+    "budget": 100.0,
+    "small_primes": [3, 5, 7, 11, 13, 17, 19, 23, 29, 31],
+    "ensure_prime_in_window": true
+  },
+  "model": {
+    "hidden_dim": 256,
+    "layers": 4,
+    "dropout": 0.05,
+    "residual": true,
+    "layer_norm": true
+  },
+  "mcts": {
+    "simulations": 64,
+    "c_puct": 1.5,
+    "gamma": 1.0,
+    "temperature": 1.0,
+    "root_dirichlet_alpha": 0.30,
+    "root_exploration_fraction": 0.25,
+    "add_root_noise": true
+  },
+  "train": {
+    "seed": 7,
+    "mode": "mcts",
+    "steps": 2000,
+    "batch_size": 256,
+    "lr": 0.0001,
+    "replay_capacity": 100000,
+    "episodes_per_step": 2,
+    "eval_every": 50,
+    "checkpoint_every": 250,
+    "device": "auto",
+    "run_dir": "runs",
+    "use_amp": true,
+    "cosine_lr": true,
+    "min_lr_ratio": 0.1,
+    "resume_checkpoint": null
+  },
+  "eval": {
+    "episodes": 300,
+    "n_buckets": [[10000, 100000], [100000, 1000000], [1000000, 10000000]]
+  }
+}

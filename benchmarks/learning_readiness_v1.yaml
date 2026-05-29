@@ -1,0 +1,17 @@
+name: primearena_learning_readiness_v1
+thresholds:
+  expert_success_rate_min: 0.99
+  eval_success_rate_min: 0.80
+  eval_success_aware_model_vs_baseline_delta_min: 0.0
+  eval_wrong_guess_rate_max: 0.20
+  replay_size_min: 0
+requirements:
+  eval_checkpoint_eligible: true
+  checkpoint_promoted_success: true
+  best_by_success_exists: true
+  best_by_delta_only_if_gate_passes: true
+  batched_mcts_inference_when_mcts: true
+notes:
+  - "Strict learning gate: success-aware delta prevents cheap failures from passing."
+  - "best_by_delta.pt is allowed only when the success-aware delta promotion gate passed."
+  - "This certifies readiness to begin structure-hunting, not discovery of prime structure."

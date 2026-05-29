@@ -1,0 +1,15 @@
+name: primearena_v0_success_benchmark
+version: 0.1
+purpose: >
+  Gate PrimeArena runs so we do not mistake trivial wheel/sieve rediscovery for real progress.
+thresholds:
+  wheel_vs_odd_delta_min: 0.25
+  expert_success_rate_min: 0.99
+  train_success_rate_min: 0.80
+  eval_success_rate_min: 0.00
+  model_vs_baseline_delta_min: -20.0
+notes:
+  - wheel_vs_odd_delta_min means average odd_scan_cost - average wheel_scan_cost must be positive.
+  - model_vs_baseline_delta_min is deliberately permissive for v0 smoke runs.
+  - Tighten eval_success_rate_min and model_vs_baseline_delta_min after the imitation warm-start is stable.
+  - Novelty claims require separate interpretability probes and ablations.

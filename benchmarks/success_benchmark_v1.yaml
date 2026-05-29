@@ -1,0 +1,15 @@
+name: primearena_alpha_practices_v1
+version: 0.2
+purpose: >
+  Stricter gate after a stable imitation warm-start. This benchmark is intended for
+  Modal runs, not tiny local smoke tests.
+thresholds:
+  wheel_vs_odd_delta_min: 0.25
+  expert_success_rate_min: 0.99
+  train_success_rate_min: 0.95
+  eval_success_rate_min: 0.80
+  model_vs_baseline_delta_min: -5.0
+notes:
+  - This is still not a novelty benchmark.
+  - Clearing this means the run is healthy enough for MCTS and interpretability work.
+  - Novelty requires beating wheel/sieve baselines on OOD ranges plus ablations.

@@ -1,0 +1,91 @@
+{
+  "env": {
+    "n_min": 1000,
+    "n_max": 50000,
+    "window_size": 32,
+    "max_steps": 30,
+    "budget": 30.0,
+    "small_primes": [
+      3,
+      5,
+      7,
+      11,
+      13
+    ],
+    "ensure_prime_in_window": true
+  },
+  "model": {
+    "hidden_dim": 64,
+    "layers": 2,
+    "dropout": 0.0,
+    "residual": true,
+    "layer_norm": true,
+    "architecture": "candidate_transformer",
+    "n_heads": 2,
+    "ff_mult": 2,
+    "use_positional_embeddings": true
+  },
+  "mcts": {
+    "simulations": 8,
+    "c_puct": 1.5,
+    "gamma": 1.0,
+    "temperature": 1.0,
+    "root_dirichlet_alpha": 0.3,
+    "root_exploration_fraction": 0.25,
+    "add_root_noise": true,
+    "batched_inference": true
+  },
+  "train": {
+    "seed": 7,
+    "mode": "imitation",
+    "steps": 50,
+    "batch_size": 32,
+    "lr": 0.0005,
+    "replay_capacity": 10000,
+    "episodes_per_step": 1,
+    "eval_every": 10,
+    "checkpoint_every": 25,
+    "device": "auto",
+    "run_dir": "runs",
+    "use_amp": true,
+    "cosine_lr": true,
+    "min_lr_ratio": 0.1,
+    "torch_num_threads": 1
+  },
+  "eval": {
+    "episodes": 5,
+    "n_buckets": [
+      [
+        1000,
+        10000
+      ],
+      [
+        10000,
+        50000
+      ]
+    ]
+  },
+  "curriculum": {
+    "enabled": false,
+    "hard_cases_path": "runs/hard_cases_smoke.jsonl",
+    "hard_case_mix": 0.35,
+    "mine_every": 0,
+    "mine_candidates": 64,
+    "top_k": 16,
+    "min_gap": 0,
+    "score": "gap_wheel"
+  },
+  "distributed": {
+    "enabled": false,
+    "shard_dir": "runs/replay_shards",
+    "checkpoint_dir": "runs/checkpoints",
+    "selfplay_workers": 2,
+    "episodes_per_worker": 4,
+    "max_shards_per_train": 16,
+    "worker_mode": "mcts",
+    "round_count": 1,
+    "league_dir": "runs/league",
+    "promotion_min_success_delta": 0.0,
+    "promotion_min_score_delta": 0.0
+  }
+}

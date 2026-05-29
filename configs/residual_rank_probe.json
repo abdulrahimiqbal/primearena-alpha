@@ -1,0 +1,32 @@
+{
+  "env": {
+    "n_min": 10000,
+    "n_max": 1000000,
+    "residual_rank_mode": true,
+    "residual_rank_sieve_bound": 211,
+    "residual_rank_window_size": 512,
+    "residual_rank_target": "next_prime_index",
+    "residual_rank_hide_small_mod_features": true,
+    "residual_rank_eval_bounds": [30, 210, 211, 1000]
+  },
+  "model": {
+    "architecture": "candidate_transformer",
+    "hidden_dim": 96,
+    "layers": 2,
+    "dropout": 0.05,
+    "residual": true,
+    "layer_norm": true,
+    "n_heads": 4,
+    "ff_mult": 2,
+    "use_positional_embeddings": true
+  },
+  "train": {
+    "seed": 7,
+    "device": "auto",
+    "run_dir": "runs",
+    "torch_num_threads": 1
+  },
+  "eval": {
+    "episodes": 512
+  }
+}

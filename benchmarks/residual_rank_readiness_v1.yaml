@@ -1,0 +1,13 @@
+name: primearena_residual_rank_readiness_v1
+thresholds:
+  trained_top1_accuracy_min: 0.10
+  trained_mean_reciprocal_rank_min: 0.20
+  trained_mrr_delta_vs_nearest_min: 0.0
+  trained_mrr_delta_vs_input_only_min: 0.0
+  trained_mrr_delta_vs_random_model_min: 0.0
+requirements:
+  residual_rank_mode: true
+  residual_rank_hide_small_mod_features: true
+notes:
+  - "Residual rank readiness asks whether ranking survivors beats input/random controls."
+  - "This is not a proof-game metric and not a discovery claim."

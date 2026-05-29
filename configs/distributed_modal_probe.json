@@ -1,0 +1,80 @@
+{
+  "env": {
+    "n_min": 10000,
+    "n_max": 10000000,
+    "window_size": 128,
+    "max_steps": 100,
+    "budget": 100.0,
+    "small_primes": [3, 5, 7, 11, 13, 17, 19, 23, 29, 31],
+    "ensure_prime_in_window": true
+  },
+  "model": {
+    "architecture": "candidate_transformer",
+    "hidden_dim": 256,
+    "layers": 4,
+    "dropout": 0.05,
+    "residual": true,
+    "layer_norm": true,
+    "n_heads": 4,
+    "ff_mult": 4,
+    "conv_kernel": 5,
+    "use_positional_embeddings": true
+  },
+  "mcts": {
+    "simulations": 8,
+    "c_puct": 1.5,
+    "gamma": 1.0,
+    "temperature": 1.0,
+    "root_dirichlet_alpha": 0.3,
+    "root_exploration_fraction": 0.25,
+    "add_root_noise": true,
+    "batched_inference": true
+  },
+  "train": {
+    "seed": 7,
+    "mode": "mcts",
+    "steps": 20,
+    "batch_size": 128,
+    "lr": 0.0001,
+    "replay_capacity": 50000,
+    "episodes_per_step": 4,
+    "eval_every": 10,
+    "checkpoint_every": 10,
+    "device": "auto",
+    "run_dir": "runs",
+    "use_amp": true,
+    "cosine_lr": true,
+    "min_lr_ratio": 0.1,
+    "resume_checkpoint": null,
+    "prefill_replay_shards": [],
+    "save_replay_shards": true,
+    "torch_num_threads": 1
+  },
+  "eval": {
+    "episodes": 20,
+    "n_buckets": [[10000, 100000], [100000, 1000000], [1000000, 10000000]]
+  },
+  "curriculum": {
+    "enabled": false,
+    "hard_cases_path": "runs/hard_cases_modal_probe.jsonl",
+    "hard_case_mix": 0.0,
+    "mine_every": 0,
+    "mine_candidates": 64,
+    "top_k": 16,
+    "min_gap": 0,
+    "score": "gap_wheel"
+  },
+  "distributed": {
+    "enabled": true,
+    "shard_dir": "runs/replay_shards",
+    "checkpoint_dir": "runs/checkpoints",
+    "selfplay_workers": 2,
+    "episodes_per_worker": 2,
+    "max_shards_per_train": 256,
+    "worker_mode": "mcts",
+    "round_count": 1,
+    "league_dir": "runs/league",
+    "promotion_min_success_delta": 0.0,
+    "promotion_min_score_delta": 0.0
+  }
+}

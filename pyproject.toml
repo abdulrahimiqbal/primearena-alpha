@@ -1,0 +1,17 @@
+[project]
+name = "primearena-alpha"
+version = "0.3.0"
+description = "AlphaZero-inspired prime-search game and training harness"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "pandas>=2.2",
+  "pyyaml>=6.0",
+  "streamlit>=1.36",
+  "tensorboard>=2.16",
+  "torch>=2.3",
+  "modal>=1.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["primearena*"]

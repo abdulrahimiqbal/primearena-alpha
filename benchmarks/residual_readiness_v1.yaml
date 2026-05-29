@@ -1,0 +1,13 @@
+name: primearena_residual_readiness_v1
+thresholds:
+  residual_eval_success_rate_min: 0.99
+  residual_success_aware_delta_vs_nearest_min: 0.0
+  residual_success_aware_delta_vs_random_min: 0.0
+  residual_wrong_guess_count_max: 0
+  residual_sieve_bound_min: 211
+requirements:
+  residual_mode: true
+  residual_certified_guesses_only: true
+notes:
+  - "Residual readiness removes small-prime wheel/sieve structure before the model acts."
+  - "This is a readiness gate for residual structure-hunting, not a discovery claim."

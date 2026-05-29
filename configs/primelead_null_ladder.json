@@ -1,0 +1,15 @@
+{
+  "primelead": {
+    "n_min": 100000,
+    "n_max": 100000000,
+    "window_size": 512,
+    "nulls": ["cramer", "wheel", "gap_hist", "residue_pair", "block_bootstrap"],
+    "q_values": [6, 10, 30, 210, 2310],
+    "sieve_bounds": [30, 210, 1000],
+    "measurement_budget": 10,
+    "complexity_penalty": true,
+    "max_complexity": 80,
+    "ood_multiplier": 10,
+    "train_steps": 250
+  }
+}

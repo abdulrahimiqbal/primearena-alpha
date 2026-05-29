@@ -1,0 +1,9 @@
+name: primearena_learning_readiness_smoke
+thresholds:
+  expert_success_rate_min: 0.99
+  replay_size_min: 0
+requirements:
+  best_by_delta_only_if_gate_passes: true
+notes:
+  - "Permissive local smoke gate for short runs that only validates logging, replay, and checkpoint-safety semantics."
+  - "Use learning_readiness_v1.yaml for real learning-valid runs."

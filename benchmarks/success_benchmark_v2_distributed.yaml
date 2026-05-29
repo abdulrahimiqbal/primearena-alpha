@@ -1,0 +1,11 @@
+name: primearena_v0_3_distributed_gate
+thresholds:
+  wheel_vs_odd_delta_min: 0.0
+  expert_success_rate_min: 0.99
+  train_success_rate_min: 0.50
+  eval_success_rate_min: 0.20
+  model_vs_baseline_delta_min: -50.0
+notes:
+  - "This benchmark is a v0.3 integration gate, not a discovery claim."
+  - "It checks that the environment, expert, run logs, and baseline comparisons are sane after distributed-shard training."
+  - "Tighten eval_success_rate_min and model_vs_baseline_delta_min after stable Modal runs."

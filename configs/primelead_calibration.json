@@ -1,0 +1,13 @@
+{
+  "primelead_calibration": {
+    "n_min": 100000,
+    "n_max": 100000000,
+    "window_size": 1024,
+    "q_values": [10, 30],
+    "samples": 20000,
+    "seeds": 3,
+    "measurement_budget": 10,
+    "ood_multiplier": 10,
+    "train_steps": 250
+  }
+}

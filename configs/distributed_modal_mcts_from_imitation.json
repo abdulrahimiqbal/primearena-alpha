@@ -1,0 +1,89 @@
+{
+  "env": {
+    "n_min": 10000,
+    "n_max": 10000000,
+    "window_size": 128,
+    "max_steps": 48,
+    "budget": 64.0,
+    "small_primes": [3, 5, 7, 11, 13, 17, 19, 23, 29, 31],
+    "ensure_prime_in_window": true
+  },
+  "model": {
+    "architecture": "candidate_transformer",
+    "hidden_dim": 256,
+    "layers": 4,
+    "dropout": 0.05,
+    "residual": true,
+    "layer_norm": true,
+    "n_heads": 4,
+    "ff_mult": 4,
+    "conv_kernel": 5,
+    "use_positional_embeddings": true
+  },
+  "mcts": {
+    "simulations": 32,
+    "c_puct": 1.5,
+    "gamma": 1.0,
+    "temperature": 1.0,
+    "root_dirichlet_alpha": 0.3,
+    "root_exploration_fraction": 0.25,
+    "add_root_noise": true,
+    "batched_inference": true
+  },
+  "train": {
+    "seed": 7,
+    "mode": "mcts",
+    "steps": 250,
+    "batch_size": 256,
+    "lr": 0.0001,
+    "replay_capacity": 250000,
+    "episodes_per_step": 2,
+    "eval_every": 50,
+    "checkpoint_every": 250,
+    "device": "auto",
+    "run_dir": "runs",
+    "use_amp": true,
+    "cosine_lr": true,
+    "min_lr_ratio": 0.1,
+    "resume_checkpoint": null,
+    "prefill_replay_shards": [],
+    "save_replay_shards": true
+  },
+  "eval": {
+    "episodes": 300,
+    "n_buckets": [[10000, 100000], [100000, 1000000], [1000000, 10000000]],
+    "failure_penalty_cost": 25.0,
+    "min_promotion_success_rate": 0.8,
+    "min_success_aware_delta": 0.0,
+    "max_promotion_wrong_guess_rate": 0.2,
+    "eval_certified_guesses_only": true,
+    "readiness_certified_guesses_only": true
+  },
+  "curriculum": {
+    "enabled": true,
+    "hard_cases_path": "runs/hard_cases_modal.jsonl",
+    "hard_case_mix": 0.35,
+    "mine_every": 100,
+    "mine_candidates": 2048,
+    "top_k": 256,
+    "min_gap": 0,
+    "score": "gap_wheel"
+  },
+  "distributed": {
+    "enabled": true,
+    "shard_dir": "runs/replay_shards",
+    "checkpoint_dir": "runs/checkpoints",
+    "selfplay_workers": 8,
+    "episodes_per_worker": 64,
+    "max_shards_per_train": 256,
+    "worker_mode": "mcts",
+    "selfplay_batch_size": 2,
+    "max_worker_seconds": 1800,
+    "max_replay_items_per_shard": 4096,
+    "max_selfplay_episode_steps": 48,
+    "round_count": 1,
+    "league_dir": "runs/league",
+    "promotion_min_success_delta": 0.0,
+    "promotion_min_score_delta": 0.02
+  }
+}

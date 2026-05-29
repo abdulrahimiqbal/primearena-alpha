@@ -1,0 +1,66 @@
+{
+  "env": {
+    "n_min": 10000,
+    "n_max": 1000000,
+    "max_steps": 96,
+    "budget": 96.0,
+    "ensure_prime_in_window": true,
+    "residual_mode": true,
+    "residual_sieve_bound": 211,
+    "residual_window_size": 512,
+    "residual_hide_small_mod_features": true,
+    "residual_include_distance_features": true,
+    "residual_include_density_features": true,
+    "residual_certified_guesses_only": true
+  },
+  "model": {
+    "architecture": "candidate_transformer",
+    "hidden_dim": 256,
+    "layers": 4,
+    "dropout": 0.05,
+    "residual": true,
+    "layer_norm": true,
+    "n_heads": 4,
+    "ff_mult": 4,
+    "use_positional_embeddings": true
+  },
+  "mcts": {
+    "simulations": 32,
+    "batched_inference": true
+  },
+  "train": {
+    "seed": 7,
+    "mode": "mcts",
+    "steps": 500,
+    "batch_size": 256,
+    "lr": 0.0001,
+    "replay_capacity": 250000,
+    "episodes_per_step": 2,
+    "eval_every": 50,
+    "checkpoint_every": 250,
+    "device": "auto",
+    "run_dir": "runs",
+    "use_amp": true,
+    "save_replay_shards": true
+  },
+  "eval": {
+    "episodes": 300,
+    "failure_penalty_cost": 25.0,
+    "min_promotion_success_rate": 0.8,
+    "min_success_aware_delta": 0.0,
+    "max_promotion_wrong_guess_rate": 0.2,
+    "eval_certified_guesses_only": true,
+    "readiness_certified_guesses_only": true
+  },
+  "distributed": {
+    "enabled": true,
+    "selfplay_workers": 8,
+    "episodes_per_worker": 64,
+    "max_shards_per_train": 256,
+    "worker_mode": "mcts",
+    "selfplay_batch_size": 2,
+    "max_worker_seconds": 1800,
+    "max_replay_items_per_shard": 4096,
+    "max_selfplay_episode_steps": 96
+  }
+}
