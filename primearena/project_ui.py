@@ -341,13 +341,13 @@ def show_calibration(calibration: Dict[str, Any]) -> None:
     st.write(calibration.get("decision", "No decision recorded."))
     df = aggregate_calibration(calibration)
     if not df.empty:
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
         chart = df.set_index("q")[["weak_iid_auc", "pair_matched_auc", "weak_iid_ood_auc"]]
         st.bar_chart(chart)
     cards = promoted_cards(calibration)
     if not cards.empty:
         st.subheader("Promoted Calibration Leads")
-        st.dataframe(cards, use_container_width=True, hide_index=True)
+        st.dataframe(cards, width="stretch", hide_index=True)
     section_card(
         "Interpretation",
         "The detector recovered the known q=10 consecutive residue-pair signal. This validates the real-vs-fake machinery before using it for exploratory null-ladder runs.",
@@ -366,7 +366,7 @@ def show_null_ladder(ladder: Dict[str, Any]) -> None:
     df = aggregate_ladder(ladder)
     if not df.empty:
         st.subheader("Null Model Metrics")
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
         chart = df.set_index("null_model")[["auc", "ood_auc", "permutation_auc"]]
         st.line_chart(chart)
 
@@ -383,14 +383,14 @@ def show_null_ladder(ladder: Dict[str, Any]) -> None:
             "permutation_auc_delta",
             "top_feature",
         ]
-        st.dataframe(rows_df[[c for c in cols if c in rows_df.columns]], use_container_width=True, hide_index=True)
+        st.dataframe(rows_df[[c for c in cols if c in rows_df.columns]], width="stretch", hide_index=True)
 
     bad_rows = pd.DataFrame()
     if not rows_df.empty and "permutation_test_AUC" in rows_df.columns:
         bad_rows = rows_df[rows_df["permutation_test_AUC"] >= 0.60]
     if not bad_rows.empty:
         st.subheader("Leakage Trigger")
-        st.dataframe(bad_rows, use_container_width=True, hide_index=True)
+        st.dataframe(bad_rows, width="stretch", hide_index=True)
         section_card(
             "Why this blocks science claims",
             "A shuffled-label permutation control should be near chance. AUC above 0.60 means the dataset/control path contains a non-scientific separability channel or evaluation bug.",
@@ -401,7 +401,7 @@ def show_null_ladder(ladder: Dict[str, Any]) -> None:
     if not cards.empty:
         st.subheader("Promoted Cards")
         st.caption("These are shown for debugging only while the leakage warning is active.")
-        st.dataframe(cards, use_container_width=True, hide_index=True)
+        st.dataframe(cards, width="stretch", hide_index=True)
 
 
 def show_learning_stack(runs_dir: Path) -> None:
@@ -425,7 +425,7 @@ def show_learning_stack(runs_dir: Path) -> None:
             }
         )
     if metric_runs:
-        st.dataframe(pd.DataFrame(metric_runs), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(metric_runs), width="stretch", hide_index=True)
     else:
         st.info("No metrics.jsonl runs found.")
 
