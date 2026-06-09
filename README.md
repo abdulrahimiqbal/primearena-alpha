@@ -142,13 +142,21 @@ The report includes:
 - candidate-token probe accuracy for candidate residues when using `candidate_transformer` or `candidate_conv`;
 - greedy evaluation after ablating direct mod-6/mod-30/mod-210 input features.
 
-## Run the simple UI
+## Run the project status UI
+
+```bash
+streamlit run primearena/project_ui.py -- --runs-dir runs
+```
+
+The project UI summarizes the research arc: infrastructure validation, safe learning, structure readiness, residual controls, PrimeLead calibration, the full null-ladder result, and the current blocker/next actions.
+
+## Run the training dashboard
 
 ```bash
 streamlit run primearena/dashboard.py -- --runs-dir runs
 ```
 
-The dashboard reads `runs/*/metrics.jsonl` and shows reward, success rate, cost, losses, learning rate, replay size, checkpoint promotions, batched-MCTS flags, curriculum hard-case counts, model-vs-baseline deltas, and recent episode traces.
+The training dashboard reads `runs/*/metrics.jsonl` and shows reward, success rate, cost, losses, learning rate, replay size, checkpoint promotions, batched-MCTS flags, curriculum hard-case counts, model-vs-baseline deltas, worker progress, readiness metrics, and recent episode traces.
 
 TensorBoard is also logged under each run:
 
