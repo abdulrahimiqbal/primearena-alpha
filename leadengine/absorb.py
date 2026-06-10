@@ -14,6 +14,25 @@ class AbsorptionError(RuntimeError):
     """Raised when exponential tilting would produce a degenerate null."""
 
 
+@dataclass(frozen=True)
+class GeneratorConstraint:
+    name: str = "generator_constraint"
+    wheel: int | None = None
+    allowed_residues: tuple[int, ...] | None = None
+    residue_weights: tuple[float, ...] | None = None
+
+    def __call__(self, w: Window) -> np.ndarray:
+        return np.asarray([0.0], dtype=np.float32)
+
+    def complexity(self) -> float:
+        return 0.0
+
+    def describe(self) -> str:
+        residues = "*" if self.allowed_residues is None else ",".join(str(int(r)) for r in self.allowed_residues)
+        wheel = "*" if self.wheel is None else str(int(self.wheel))
+        return f"GeneratorConstraint(wheel={wheel};allowed={residues})"
+
+
 def _feature_matrix(stats: Sequence[Statistic], windows: list[Window]) -> np.ndarray:
     rows: list[np.ndarray] = []
     for w in windows:

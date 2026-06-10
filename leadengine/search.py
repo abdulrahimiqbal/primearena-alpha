@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -44,6 +45,9 @@ class SearchLog:
     sampled_fraction: str
     program_space: str
     generation_attempts: int
+    programs_per_sec: float = 0.0
+    fitness_subsample_windows: int = 0
+    finalists_scored: int = 0
 
 
 @dataclass(frozen=True)
@@ -156,6 +160,153 @@ def _holdout_auc_windows(program: Program, real_windows, null_windows, seed: int
     return float(roc_auc_score(y[test_idx], scores))
 
 
+def _as_2d(rows: list[np.ndarray], dtype=np.float32) -> np.ndarray:
+    width = max((int(np.asarray(r).size) for r in rows), default=0)
+    out = np.zeros((len(rows), width), dtype=dtype)
+    for i, row in enumerate(rows):
+        arr = np.asarray(row, dtype=dtype).reshape(-1)
+        out[i, : arr.size] = arr
+    return np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _batch_eval(expr, windows, cache: dict[str, object]):
+    key = expr.describe()
+    if key in cache:
+        return cache[key]
+    vals = [_batch_eval(arg, windows, cache) for arg in expr.args]
+    if expr.op == "w":
+        out = windows
+    elif expr.op == "positions":
+        out = [
+            np.asarray(w.meta.get("integer_values"), dtype=np.int64)[np.asarray(w.values) > 0]
+            if "integer_values" in w.meta
+            else int(w.start) + np.flatnonzero(np.asarray(w.values) > 0).astype(np.int64)
+            for w in windows
+        ]
+    elif expr.op == "gaps":
+        out = [np.diff(np.asarray(x, dtype=np.int64)).astype(np.int64) if np.asarray(x).size > 1 else np.asarray([], dtype=np.int64) for x in vals[0]]
+    elif expr.op == "mod":
+        q = int(expr.params[0])
+        out = [(np.asarray(x, dtype=np.int64) % q).astype(np.int64) for x in vals[0]]
+    elif expr.op == "pairs":
+        lag = int(expr.params[0])
+        out = [
+            np.stack([seq[:-lag], seq[lag:]], axis=1).astype(np.int64) if (seq := np.asarray(x, dtype=np.int64)).size > lag else np.empty((0, 2), dtype=np.int64)
+            for x in vals[0]
+        ]
+    elif expr.op == "hist":
+        q = int(expr.params[0])
+        out = _as_2d([
+            (lambda counts: counts / max(float(counts.sum()), 1.0))(np.bincount(np.asarray(x, dtype=np.int64) % q, minlength=q).astype(np.float32))
+            if np.asarray(x).size else np.zeros(q, dtype=np.float32)
+            for x in vals[0]
+        ])
+    elif expr.op == "pair_hist":
+        q = int(expr.params[0])
+        rows = []
+        for x in vals[0]:
+            pairs = np.asarray(x, dtype=np.int64).reshape(-1, 2)
+            if pairs.size:
+                ids = (pairs[:, 0] % q) * q + (pairs[:, 1] % q)
+                counts = np.bincount(ids.astype(np.int64), minlength=q * q).astype(np.float32)
+                rows.append(counts / max(float(counts.sum()), 1.0))
+            else:
+                rows.append(np.zeros(q * q, dtype=np.float32))
+        out = _as_2d(rows)
+    elif expr.op == "fourier_power":
+        k = int(expr.params[0])
+        rows = []
+        for w in vals[0]:
+            indicator = np.asarray(w.values, dtype=np.float64)
+            spectrum = np.fft.rfft(indicator) if indicator.size else np.asarray([0.0])
+            kk = min(k, spectrum.size - 1)
+            rows.append(np.asarray([float(np.abs(spectrum[kk]) ** 2 / max(indicator.size, 1))], dtype=np.float32))
+        out = _as_2d(rows)
+    elif expr.op == "logweight":
+        out = [(1.0 / np.maximum(np.log(np.maximum(np.asarray(x, dtype=np.float64), 3.0)), 1.0)).astype(np.float32) for x in vals[0]]
+    elif expr.op == "ratios":
+        source = [np.asarray(w.values, dtype=np.float64) for w in vals[0]] if expr.args[0].op == "w" else vals[0]
+        out = [
+            (np.minimum(seq[:-1], seq[1:]) / np.maximum(np.maximum(seq[:-1], seq[1:]), 1e-12)).astype(np.float32)
+            if (seq := np.asarray(x, dtype=np.float64)).size > 1 else np.empty(0, dtype=np.float32)
+            for x in source
+        ]
+    elif expr.op == "fhist":
+        bins = int(expr.params[0])
+        source = []
+        if expr.args[0].op == "w":
+            for w in vals[0]:
+                seq = np.asarray(w.values, dtype=np.float64)
+                if w.meta.get("domain") == "ff_angles":
+                    seq = seq / np.pi
+                source.append(seq)
+        else:
+            source = vals[0]
+        out = _as_2d([np.histogram(np.asarray(x, dtype=np.float64), bins=bins, range=(0.0, 1.0))[0].astype(np.float32) for x in source])
+        sums = np.maximum(out.sum(axis=1, keepdims=True), 1.0)
+        out = out / sums
+    elif expr.op == "mean":
+        out = _as_2d([np.asarray([float(np.mean(np.asarray(x, dtype=np.float64))) if np.asarray(x).size else 0.0]) for x in vals[0]])
+    elif expr.op == "var":
+        out = _as_2d([np.asarray([float(np.var(np.asarray(x, dtype=np.float64))) if np.asarray(x).size else 0.0]) for x in vals[0]])
+    elif expr.op == "normalize":
+        vec = np.asarray(vals[0], dtype=np.float32)
+        total = np.maximum(np.sum(np.abs(vec), axis=1, keepdims=True), 1e-12)
+        out = vec / total
+    elif expr.op == "concat":
+        out = np.concatenate([np.asarray(v, dtype=np.float32) for v in vals], axis=1)
+    elif expr.op == "scalar_vec":
+        out = np.asarray(vals[0], dtype=np.float32).reshape(len(windows), -1)
+    else:
+        out = _feature_matrix(Program(expr), windows).astype(np.float32)
+    cache[key] = out
+    return out
+
+
+def _feature_matrix_cached(program: Program, windows, cache: dict[str, object]) -> np.ndarray:
+    key = program.describe()
+    if key not in cache:
+        out = _batch_eval(program.root, windows, cache)
+        cache[key] = np.asarray(out, dtype=np.float32).reshape(len(windows), -1)
+    return np.asarray(cache[key], dtype=np.float32)
+
+
+def _screen_auc(
+    program: Program,
+    real_windows,
+    null_windows,
+    cache_real: dict[str, object],
+    cache_null: dict[str, object],
+    seed: int,
+    shuffle_labels: bool = False,
+) -> float:
+    x_real = _feature_matrix_cached(program, real_windows, cache_real)
+    x_null = _feature_matrix_cached(program, null_windows, cache_null)
+    width = max(x_real.shape[1], x_null.shape[1])
+    if width == 0:
+        return 0.5
+    if x_real.shape[1] != width:
+        x_real = np.pad(x_real, ((0, 0), (0, width - x_real.shape[1])))
+    if x_null.shape[1] != width:
+        x_null = np.pad(x_null, ((0, 0), (0, width - x_null.shape[1])))
+    x = np.vstack([x_real, x_null]).astype(np.float32)
+    y = np.concatenate([np.ones(len(x_real), dtype=np.int8), np.zeros(len(x_null), dtype=np.int8)])
+    if shuffle_labels:
+        rng = np.random.default_rng(seed)
+        rng.shuffle(y)
+    pos = x[y == 1]
+    neg = x[y == 0]
+    if len(pos) == 0 or len(neg) == 0:
+        return 0.5
+    scale = np.std(x, axis=0)
+    scale = np.where(scale < 1e-8, 1.0, scale)
+    weights = (pos.mean(axis=0) - neg.mean(axis=0)) / scale
+    scores = x @ weights
+    if float(np.std(scores)) <= 1e-12:
+        return 0.5
+    return float(roc_auc_score(y, scores))
+
+
 def _permutation_p(scores: np.ndarray, labels: np.ndarray, seed: int, rounds: int = 1000) -> float:
     rng = np.random.default_rng(seed)
     observed = float(roc_auc_score(labels, scores))
@@ -234,12 +385,17 @@ def evolutionary_search(
 
     sample_train = 192 if int(budget) <= 2500 else 256
     sample_eval = 256 if int(budget) <= 2500 else 384
+    fitness_side = 500
     train_rng = np.random.default_rng(30_001 + int(seed))
     val_rng = np.random.default_rng(30_101 + int(seed))
-    train_real_windows = train_real.sample(sample_train, train_rng)
-    train_null_windows = null.sample_like(train_real, sample_train, train_rng)
-    val_real_windows = val_real.sample(sample_eval, val_rng)
-    val_null_windows = null.sample_like(val_real, sample_eval, val_rng)
+    train_real_windows = train_real.sample(fitness_side, train_rng)
+    train_null_windows = null.sample_like(train_real, fitness_side, train_rng)
+    val_real_windows = val_real.sample(fitness_side, val_rng)
+    val_null_windows = null.sample_like(val_real, fitness_side, val_rng)
+    train_cache_real: dict[str, np.ndarray] = {}
+    train_cache_null: dict[str, np.ndarray] = {}
+    val_cache_real: dict[str, np.ndarray] = {}
+    val_cache_null: dict[str, np.ndarray] = {}
 
     queue: list[Program] = []
     seen: dict[str, Program] = {}
@@ -279,6 +435,7 @@ def evolutionary_search(
 
     fill_queue([])
     ledger: list[SearchLedgerEntry] = []
+    t0 = time.perf_counter()
     while len(ledger) < int(budget):
         if not queue:
             fill_queue(ledger[-int(pop) :])
@@ -286,20 +443,22 @@ def evolutionary_search(
                 break
         prog = queue.pop(0)
         i = len(ledger)
-        train_auc = _holdout_auc_windows(
+        train_auc = _screen_auc(
             prog,
             train_real_windows,
             train_null_windows,
             seed=10_000 + 37 * i + int(seed),
+            cache_real=train_cache_real,
+            cache_null=train_cache_null,
             shuffle_labels=shuffle_labels,
         )
-        val_auc, _, _ = _fit_eval_windows(
+        val_auc = _screen_auc(
             prog,
-            train_real_windows,
-            train_null_windows,
             val_real_windows,
             val_null_windows,
             seed=20_000 + 37 * i + int(seed),
+            cache_real=val_cache_real,
+            cache_null=val_cache_null,
             shuffle_labels=shuffle_labels,
         )
         fitness = float(train_auc - float(lam) * prog.complexity())
@@ -316,9 +475,41 @@ def evolutionary_search(
         )
         if len(ledger) % max(32, int(pop) // 4) == 0:
             fill_queue(_rank_ledger(ledger)[: int(pop)])
+    elapsed = max(time.perf_counter() - t0, 1e-9)
 
     ranked = _rank_ledger(ledger)
     shapes = {program_shape(entry.program) for entry in ledger}
+    if not ranked:
+        return _empty_result(budget, seed, attempts)
+
+    finalist_count = min(10, len(ranked))
+    finalist_scores: dict[str, tuple[float, float, bool]] = {}
+    matched_family = str(getattr(null, "name", "")) in {"sato_tate"}
+    for j, entry in enumerate(ranked[:finalist_count]):
+        auc, scores, labels = _fit_eval(
+            entry.program,
+            train_real,
+            ood_real,
+            null,
+            n_train=max(sample_train, 512),
+            n_eval=max(sample_eval, 768),
+            seed=999_001 + 1009 * j + int(seed),
+            shuffle_labels=shuffle_labels,
+        )
+        p_value = _permutation_p(scores, labels, seed=999_777 + 1009 * j + int(seed), rounds=1000)
+        promoted = bool((not shuffle_labels) and not matched_family and auc >= 0.60 and p_value < 0.001)
+        finalist_scores[entry.program.describe()] = (float(auc), float(p_value), promoted)
+
+    best_entry = max(
+        ranked[:finalist_count],
+        key=lambda e: (finalist_scores[e.program.describe()][0], -finalist_scores[e.program.describe()][1], e.val_auc),
+    )
+    best = best_entry.program
+    ood_auc, p_value, promoted = finalist_scores[best.describe()]
+    best.ood_auc = float(ood_auc)
+    best.promoted = bool(promoted)
+    best.meta.update({"permutation_p": p_value, "val_auc": best_entry.val_auc, "train_auc": best_entry.train_auc})
+
     log = SearchLog(
         budget=int(budget),
         seed=int(seed),
@@ -327,41 +518,28 @@ def evolutionary_search(
         sampled_fraction="open",
         program_space="full_dsl_depth<=8_complexity<=20",
         generation_attempts=int(attempts),
+        programs_per_sec=float(len(ledger) / elapsed),
+        fitness_subsample_windows=int(2 * fitness_side),
+        finalists_scored=int(finalist_count),
     )
-    if not ranked:
-        return _empty_result(budget, seed, attempts)
-
-    best_entry = ranked[0]
-    best = best_entry.program
-    ood_auc, scores, labels = _fit_eval(
-        best,
-        train_real,
-        ood_real,
-        null,
-        n_train=max(sample_train, 512),
-        n_eval=max(sample_eval, 768),
-        seed=999_001 + int(seed),
-        shuffle_labels=shuffle_labels,
-    )
-    p_value = _permutation_p(scores, labels, seed=999_777 + int(seed), rounds=1000)
-    matched_family = str(getattr(null, "name", "")) in {"sato_tate"}
-    promoted = bool((not shuffle_labels) and not matched_family and ood_auc >= 0.60 and p_value < 0.001)
-    best.ood_auc = float(ood_auc)
-    best.promoted = promoted
-    best.meta.update({"permutation_p": p_value, "val_auc": best_entry.val_auc, "train_auc": best_entry.train_auc})
 
     final_ledger: list[SearchLedgerEntry] = []
     for entry in ledger:
-        if entry.program.describe() == best.describe():
+        desc = entry.program.describe()
+        if desc in finalist_scores:
+            auc, p, pro = finalist_scores[desc]
+            prog = best if desc == best.describe() else entry.program
+            prog.ood_auc = float(auc)
+            prog.promoted = bool(pro)
             final_ledger.append(
                 SearchLedgerEntry(
-                    program=best,
+                    program=prog,
                     train_auc=entry.train_auc,
                     val_auc=entry.val_auc,
-                    ood_auc=float(ood_auc),
-                    permutation_p=float(p_value),
+                    ood_auc=float(auc),
+                    permutation_p=float(p),
                     fitness=entry.fitness,
-                    promoted=promoted,
+                    promoted=bool(pro),
                 )
             )
         else:
