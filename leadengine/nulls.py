@@ -118,39 +118,46 @@ class SkeletonResampleNull:
 
     def sample_like(self, real: SequenceDataset, n_windows: int, rng: np.random.Generator) -> list[Window]:
         donors = real.sample(int(n_windows), rng)
+        return [self.twin_for(w, rng) for w in donors]
+
+    def twin_for(self, w: Window, rng: np.random.Generator) -> Window:
+        count = int(np.asarray(w.values).sum())
+        start = int(w.start)
+        length = int(len(w.values))
+
+        def marker(values: np.ndarray, local_rng: np.random.Generator | None) -> np.ndarray:
+            return self._mark_positions(values, local_rng or rng, count)
+
+        return self.builder.build(
+            start,
+            length,
+            marker,
+            rng,
+            {
+                "null_model": self.name,
+                "wheel": int(self.wheel),
+                "allowed_residues": list(self.residues),
+                "donor_prime_count": count,
+                "paired_skeleton": True,
+            },
+        )
+
+    def sample_pairs(self, real: SequenceDataset, n_windows: int, rng: np.random.Generator) -> tuple[list[Window], list[Window]]:
+        donors = real.sample(int(n_windows), rng)
         out: list[Window] = []
         for w in donors:
-            count = int(np.asarray(w.values).sum())
-            start = int(w.start)
-            length = int(len(w.values))
-
-            def marker(values: np.ndarray, local_rng: np.random.Generator | None) -> np.ndarray:
-                return self._mark_positions(values, local_rng or rng, count)
-
-            out.append(
-                self.builder.build(
-                    start,
-                    length,
-                    marker,
-                    rng,
-                    {
-                        "null_model": self.name,
-                        "wheel": int(self.wheel),
-                        "allowed_residues": list(self.residues),
-                        "donor_prime_count": count,
-                    },
-                )
-            )
-        return out
+            out.append(self.twin_for(w, rng))
+        return donors, out
 
     def absorb(self, stat: Statistic, real: SequenceDataset) -> NullModel:
         from .absorb import GeneratorConstraint, TiltedNull
 
         if isinstance(stat, GeneratorConstraint):
-            residues = tuple(int(r) for r in (stat.allowed_residues or self.residues))
+            wheel = int(stat.wheel or self.wheel)
+            residues = tuple(int(r) for r in (stat.allowed_residues if stat.allowed_residues is not None else coprime_residues(wheel)))
             weights = None if stat.residue_weights is None else tuple(float(x) for x in stat.residue_weights)
             return SkeletonResampleNull(
-                wheel=int(stat.wheel or self.wheel),
+                wheel=wheel,
                 allowed_residues=residues,
                 residue_weights=weights,
                 builder=self.builder,

@@ -7,6 +7,7 @@ from typing import Protocol
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
+from scipy.stats import rankdata
 
 from .core import NullModel, SequenceDataset
 from .datasets import PrimeWindowDataset
@@ -77,15 +78,13 @@ def _fit_eval(
     shuffle_labels: bool = False,
 ) -> tuple[float, np.ndarray, np.ndarray]:
     rng = np.random.default_rng(seed)
-    train_real_windows = train_real.sample(n_train, rng)
-    train_null_windows = null.sample_like(train_real, n_train, rng)
+    train_real_windows, train_null_windows = _sample_real_null(train_real, null, n_train, rng)
     x_train = np.vstack([_feature_matrix(program, train_real_windows), _feature_matrix(program, train_null_windows)]).astype(np.float32)
     y_train = np.concatenate([np.ones(n_train, dtype=np.int8), np.zeros(n_train, dtype=np.int8)])
     if shuffle_labels:
         rng.shuffle(y_train)
 
-    eval_real_windows = eval_real.sample(n_eval, rng)
-    eval_null_windows = null.sample_like(eval_real, n_eval, rng)
+    eval_real_windows, eval_null_windows = _sample_real_null(eval_real, null, n_eval, rng)
     x_eval = np.vstack([_feature_matrix(program, eval_real_windows), _feature_matrix(program, eval_null_windows)]).astype(np.float32)
     y_eval = np.concatenate([np.ones(n_eval, dtype=np.int8), np.zeros(n_eval, dtype=np.int8)])
 
@@ -127,8 +126,7 @@ def _fit_eval_windows(
 
 def _holdout_auc(program: Program, real: SequenceDataset, null: NullModel, n: int, seed: int, shuffle_labels: bool = False) -> float:
     rng = np.random.default_rng(seed)
-    real_windows = real.sample(n, rng)
-    null_windows = null.sample_like(real, n, rng)
+    real_windows, null_windows = _sample_real_null(real, null, n, rng)
     x = np.vstack([_feature_matrix(program, real_windows), _feature_matrix(program, null_windows)]).astype(np.float32)
     y = np.concatenate([np.ones(n, dtype=np.int8), np.zeros(n, dtype=np.int8)])
     order = rng.permutation(len(y))
@@ -141,6 +139,14 @@ def _holdout_auc(program: Program, real: SequenceDataset, null: NullModel, n: in
     model.fit(x[train_idx], y_train)
     scores = model.predict_proba(x[test_idx])[:, 1]
     return float(roc_auc_score(y[test_idx], scores))
+
+
+def _sample_real_null(real: SequenceDataset, null: NullModel, n: int, rng: np.random.Generator):
+    if hasattr(null, "sample_pairs"):
+        return null.sample_pairs(real, int(n), rng)
+    real_windows = real.sample(int(n), rng)
+    null_windows = null.sample_like(real, int(n), rng)
+    return real_windows, null_windows
 
 
 def _holdout_auc_windows(program: Program, real_windows, null_windows, seed: int, shuffle_labels: bool = False) -> float:
@@ -310,11 +316,18 @@ def _screen_auc(
 def _permutation_p(scores: np.ndarray, labels: np.ndarray, seed: int, rounds: int = 1000) -> float:
     rng = np.random.default_rng(seed)
     observed = float(roc_auc_score(labels, scores))
+    ranks = rankdata(scores, method="average").astype(np.float64)
+    n_pos = int(np.sum(labels == 1))
+    n_neg = int(labels.size - n_pos)
+    if n_pos <= 0 or n_neg <= 0:
+        return 1.0
     count = 0
     shuffled = labels.copy()
     for _ in range(max(1000, int(rounds))):
         rng.shuffle(shuffled)
-        if float(roc_auc_score(shuffled, scores)) >= observed:
+        pos_sum = float(np.sum(ranks[shuffled == 1]))
+        auc = (pos_sum - n_pos * (n_pos + 1) / 2.0) / max(float(n_pos * n_neg), 1.0)
+        if auc >= observed:
             count += 1
     return float((count + 1) / (max(1000, int(rounds)) + 1))
 
@@ -388,10 +401,8 @@ def evolutionary_search(
     fitness_side = 500
     train_rng = np.random.default_rng(30_001 + int(seed))
     val_rng = np.random.default_rng(30_101 + int(seed))
-    train_real_windows = train_real.sample(fitness_side, train_rng)
-    train_null_windows = null.sample_like(train_real, fitness_side, train_rng)
-    val_real_windows = val_real.sample(fitness_side, val_rng)
-    val_null_windows = null.sample_like(val_real, fitness_side, val_rng)
+    train_real_windows, train_null_windows = _sample_real_null(train_real, null, fitness_side, train_rng)
+    val_real_windows, val_null_windows = _sample_real_null(val_real, null, fitness_side, val_rng)
     train_cache_real: dict[str, np.ndarray] = {}
     train_cache_null: dict[str, np.ndarray] = {}
     val_cache_real: dict[str, np.ndarray] = {}

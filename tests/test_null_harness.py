@@ -41,6 +41,17 @@ def test_skeleton_support_contract_wheel30():
         assert all(math.gcd(int(x), 30) == 1 for x in pos)
 
 
+def test_paired_skeleton_matches_location_and_count():
+    rng = np.random.default_rng(4)
+    real = PrimeWindowDataset(100_000, 200_000, 256)
+    rw, nw = SkeletonResampleNull(30).sample_pairs(real, 50, rng)
+    for a, b in zip(rw, nw):
+        assert a.start == b.start
+        assert len(a.values) == len(b.values)
+        assert int(a.values.sum()) == int(b.values.sum())
+        assert b.meta["paired_skeleton"] is True
+
+
 def test_generator_constraint_restricts_sampler_residues():
     real = PrimeWindowDataset(100_000, 200_000, 256)
     constrained = SkeletonResampleNull(30).absorb(GeneratorConstraint(wheel=30, allowed_residues=(1, 7)), real)
@@ -48,3 +59,12 @@ def test_generator_constraint_restricts_sampler_residues():
     for w in windows:
         residues = set((_positions(w) % 30).astype(int).tolist())
         assert residues <= {1, 7}
+
+
+def test_generator_constraint_wheel_change_uses_new_coprime_residues():
+    real = PrimeWindowDataset(100_000, 200_000, 256)
+    constrained = SkeletonResampleNull(30).absorb(GeneratorConstraint(wheel=210), real)
+    rw, nw = constrained.sample_pairs(real, 100, np.random.default_rng(5))
+    assert np.mean([int(w.values.sum()) for w in nw]) > 0.8 * np.mean([int(w.values.sum()) for w in rw])
+    for w in nw:
+        assert all(math.gcd(int(x), 210) == 1 for x in _positions(w))
