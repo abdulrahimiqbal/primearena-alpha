@@ -1,3 +1,5 @@
+"""FROZEN — legacy RL stack, do not extend."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

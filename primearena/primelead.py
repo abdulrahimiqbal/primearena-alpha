@@ -14,6 +14,7 @@ from .measurements import default_measurements, measurement_summary
 from .null_refiner import suggest_refined_null
 
 
+# SUPERSEDED — do not use for science.
 DECISION_PROMOTED = "PrimeLead found promoted candidate leads."
 DECISION_NONE = "PrimeLead found no promoted leads beyond the current null ladder."
 DECISION_BUG_PREFIX = "PrimeLead found a likely bug or leakage:"
