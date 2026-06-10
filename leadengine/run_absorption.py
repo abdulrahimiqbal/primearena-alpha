@@ -99,20 +99,26 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         ledger = {"cmd": " ".join([sys.executable, "-m", "leadengine.run_absorption", *sys.argv[1:]]), "rounds": [], "absorbed": [], "total_programs_evaluated": 0, "scope_note": "prime-domain evolutionary_search eligible set from validated search.py"}
         absorbed = []
     current = replay_null(absorbed, real)
+    planned_controls = max(1, int(args.max_rounds) * max(1, len(args.seeds)))
     for r in range(start_round, args.max_rounds):
-        round_data: dict[str, Any] = {"round": r, "null": current.name, "seeds": {}, "shuffle_controls": {}, "promoted": [], "known_labels": []}
+        round_data: dict[str, Any] = {"round": r, "null": current.name, "seeds": {}, "shuffle_controls": {}, "promoted": [], "known_labels": [], "bonferroni_controls": planned_controls}
         promoted = []
         for seed in args.seeds:
             res = evolutionary_search(real, current, args.budget, seed, train_range=(args.train_min,args.train_max), val_range=(args.val_min,args.val_max), ood_range=(args.ood_min,args.ood_max))
             ledger["total_programs_evaluated"] += int(res.n_evaluated)
-            best = None if res.best is None else {"program": res.best.describe(), "ood_auc": res.best.ood_auc, "p": res.best.meta.get("permutation_p"), "promoted": res.best.promoted, "n_evaluated": res.n_evaluated}
+            best = None if res.best is None else {"program": res.best.describe(), "ood_auc": res.best.ood_auc, "p": res.best.meta.get("permutation_p"), "promoted": res.best.promoted, "n_evaluated": res.n_evaluated, "search_log": res.log.__dict__}
             round_data["seeds"][str(seed)] = best
             if res.best is not None and res.best.promoted:
                 promoted.append(res.best)
             sh = evolutionary_search(real, current, max(2000, args.budget // 10), seed + 10_000, shuffle_labels=True, train_range=(args.train_min,args.train_max), val_range=(args.val_min,args.val_max), ood_range=(args.ood_min,args.ood_max))
             ledger["total_programs_evaluated"] += int(sh.n_evaluated)
-            round_data["shuffle_controls"][str(seed)] = None if sh.best is None else {"program": sh.best.describe(), "ood_auc": sh.best.ood_auc, "p": sh.best.meta.get("permutation_p")}
-            if sh.best is not None and sh.best.ood_auc > 0.55 and float(sh.best.meta.get("permutation_p", 1.0)) < 0.01:
+            if sh.best is None:
+                round_data["shuffle_controls"][str(seed)] = None
+                continue
+            sh_p = float(sh.best.meta.get("permutation_p", 1.0))
+            sh_payload = {"program": sh.best.describe(), "ood_auc": sh.best.ood_auc, "p": sh_p, "p_bonferroni": min(1.0, sh_p * planned_controls), "search_log": sh.log.__dict__}
+            round_data["shuffle_controls"][str(seed)] = sh_payload
+            if sh.best.ood_auc > 0.55 and sh_payload["p_bonferroni"] < 0.01:
                 round_data["tripwire"] = "T2_ENGINE_LEAKAGE"
                 ledger["rounds"].append(round_data); write_new(out / f"absorption_ledger_round_{r:02d}.json", ledger); return ledger
         if len(promoted) < 2:

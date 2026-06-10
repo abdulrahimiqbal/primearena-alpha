@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable
+from typing import Any, Callable
 
 import numpy as np
 
@@ -47,6 +47,12 @@ class Expr:
         if self.op == "w":
             return "w"
         inner = [arg.describe() for arg in self.args] + [str(p) for p in self.params]
+        return f"{self.op}({','.join(inner)})"
+
+    def shape(self) -> str:
+        if self.op == "w":
+            return "w"
+        inner = [arg.shape() for arg in self.args] + ["#" for _ in self.params]
         return f"{self.op}({','.join(inner)})"
 
     def eval(self, w: Window) -> Any:
@@ -335,52 +341,128 @@ def parse_program(s: str) -> Program:
     return Program(root)
 
 
-def random_program(rng: np.random.Generator, target_type: Type = Vec, max_depth: int = 5) -> Program:
-    def seqint(depth: int) -> Expr:
-        base = positions(w_expr())
-        if depth <= 1 or rng.random() < 0.35:
-            return base
-        choice = int(rng.integers(0, 3))
-        if choice == 0:
-            return mod(seqint(depth - 1), int(rng.choice(Q_VALUES)))
-        if choice == 1:
-            return gaps(seqint(depth - 1))
-        return base
+def program_shape(program: Program) -> str:
+    return program.root.shape()
 
-    def scalar(depth: int) -> Expr:
-        if rng.random() < 0.35:
-            return fourier_power(w_expr(), int(rng.choice(FFT_K_VALUES)))
-        source = logweight(seqint(depth - 1)) if rng.random() < 0.5 else seqint(depth - 1)
-        return mean(source) if rng.random() < 0.5 else var(source)
 
-    def seqfloat(depth: int) -> Expr:
-        if rng.random() < 0.65:
-            return ratios(w_expr())
-        return logweight(seqint(max(1, depth - 1)))
+def _expr_paths(expr: Expr) -> list[tuple[int, ...]]:
+    out = [()]
+    for i, arg in enumerate(expr.args):
+        out.extend((i, *tail) for tail in _expr_paths(arg))
+    return out
 
-    def vec(depth: int) -> Expr:
-        if depth <= 1:
-            return scalar_vec(scalar(1))
-        r = rng.random()
-        if r < 0.20:
-            return fhist(seqfloat(depth - 1), int(rng.choice(FHIST_BINS)))
-        if r < 0.45:
-            q = int(rng.choice(Q_VALUES))
-            return hist(mod(positions(w_expr()), q), q)
-        if r < 0.75:
-            q = int(rng.choice(Q_VALUES))
-            lag = int(rng.choice(LAG_VALUES))
-            return pair_hist(pairs(mod(positions(w_expr()), q), lag), q)
-        if r < 0.88:
-            return normalize(vec(depth - 1))
-        if r < 0.96:
-            return concat(vec(depth - 1), vec(depth - 1))
-        return scalar_vec(scalar(depth - 1))
 
-    for _ in range(100):
-        root = scalar(max_depth) if target_type == Scalar else vec(max_depth)
+def _expr_at(expr: Expr, path: tuple[int, ...]) -> Expr:
+    for idx in path:
+        expr = expr.args[idx]
+    return expr
+
+
+def _replace_expr(expr: Expr, path: tuple[int, ...], new: Expr) -> Expr:
+    if not path:
+        return new
+    i = path[0]
+    args = list(expr.args)
+    args[i] = _replace_expr(args[i], path[1:], new)
+    return Expr(expr.op, expr.typ, expr.cost, tuple(args), expr.params)
+
+
+def _random_expr(rng: np.random.Generator, target_type: Type, max_depth: int, max_complexity: float) -> Expr:
+    if max_depth <= 1:
+        if target_type == W:
+            return w_expr()
+        raise ValueError("no terminal for requested non-window type")
+
+    def build() -> Expr:
+        if target_type == W:
+            return w_expr()
+        if target_type == SeqInt:
+            choices = ["positions", "gaps", "mod"]
+            if max_depth <= 2:
+                choices = ["positions"]
+            choice = str(rng.choice(choices, p=[0.34, 0.28, 0.38] if len(choices) == 3 else None))
+            if choice == "positions":
+                return positions(w_expr())
+            if choice == "gaps":
+                return gaps(_random_expr(rng, SeqInt, max_depth - 1, max_complexity - 1))
+            return mod(_random_expr(rng, SeqInt, max_depth - 1, max_complexity - 1), int(rng.choice(Q_VALUES)))
+        if target_type == SeqPair:
+            return pairs(_random_expr(rng, SeqInt, max_depth - 1, max_complexity - 1), int(rng.choice(LAG_VALUES)))
+        if target_type == SeqFloat:
+            if rng.random() < 0.45 or max_depth <= 2:
+                return ratios(w_expr())
+            if rng.random() < 0.65:
+                return logweight(_random_expr(rng, SeqInt, max_depth - 1, max_complexity - 1))
+            return ratios(_random_expr(rng, SeqFloat, max_depth - 1, max_complexity - 1))
+        if target_type == Scalar:
+            if rng.random() < 0.35 or max_depth <= 2:
+                return fourier_power(w_expr(), int(rng.choice(FFT_K_VALUES)))
+            source = _random_expr(rng, SeqFloat if rng.random() < 0.45 else SeqInt, max_depth - 1, max_complexity - 1)
+            return mean(source) if rng.random() < 0.5 else var(source)
+        if target_type == Vec:
+            choices = ["hist", "pair_hist", "fhist", "normalize", "concat", "scalar_vec"]
+            if max_depth <= 2:
+                choices = ["hist", "fhist", "scalar_vec"]
+            choice = str(rng.choice(choices, p=[0.23, 0.30, 0.18, 0.10, 0.09, 0.10] if len(choices) == 6 else None))
+            if choice == "hist":
+                q = int(rng.choice(Q_VALUES))
+                return hist(_random_expr(rng, SeqInt, max_depth - 1, max_complexity - 2), q)
+            if choice == "pair_hist":
+                q = int(rng.choice(Q_VALUES))
+                return pair_hist(_random_expr(rng, SeqPair, max_depth - 1, max_complexity - 2), q)
+            if choice == "fhist":
+                source = w_expr() if rng.random() < 0.45 else _random_expr(rng, SeqFloat, max_depth - 1, max_complexity - 2)
+                return fhist(source, int(rng.choice(FHIST_BINS)))
+            if choice == "normalize":
+                return normalize(_random_expr(rng, Vec, max_depth - 1, max_complexity - 1))
+            if choice == "concat":
+                left_budget = max(1.0, (max_complexity - 1) * float(rng.uniform(0.35, 0.65)))
+                right_budget = max(1.0, max_complexity - 1 - left_budget)
+                return concat(
+                    _random_expr(rng, Vec, max_depth - 1, left_budget),
+                    _random_expr(rng, Vec, max_depth - 1, right_budget),
+                )
+            return scalar_vec(_random_expr(rng, Scalar, max_depth - 1, max_complexity - 1))
+        raise ValueError(f"unsupported target type {target_type}")
+
+    for _ in range(200):
+        root = build()
+        if root.depth() <= max_depth and root.complexity() <= max_complexity:
+            return root
+    raise ValueError("could not grow typed expression within constraints")
+
+
+def random_program(
+    rng: np.random.Generator,
+    target_type: Type = Vec,
+    max_depth: int = MAX_DEPTH,
+    max_complexity: int = MAX_COMPLEXITY,
+) -> Program:
+    fallback = "pair_hist(pairs(mod(positions(w),10),1),10)" if target_type == Vec else "fourier_power(w,1)"
+    for _ in range(300):
+        root = _random_expr(rng, target_type, int(max_depth), float(max_complexity))
         try:
             return Program(_validate(root))
-        except ValueError:
+        except (TypeError, ValueError):
             continue
-    return parse_program("pair_hist(pairs(mod(positions(w),10),1),10)")
+    return parse_program(fallback)
+
+
+def mutate_program(rng: np.random.Generator, program: Program) -> Program:
+    paths = _expr_paths(program.root)
+    for _ in range(300):
+        path = paths[int(rng.integers(0, len(paths)))]
+        old = _expr_at(program.root, path)
+        fixed_cost = program.root.complexity() - old.complexity()
+        max_depth = MAX_DEPTH - len(path)
+        max_complexity = MAX_COMPLEXITY - fixed_cost
+        if max_depth < 1 or max_complexity < 0:
+            continue
+        try:
+            new = _random_expr(rng, old.typ, max_depth, max_complexity)
+            root = _validate(_replace_expr(program.root, path, new))
+            if root.typ in (Vec, Scalar):
+                return Program(root)
+        except (TypeError, ValueError):
+            continue
+    return random_program(rng, program.root.typ)

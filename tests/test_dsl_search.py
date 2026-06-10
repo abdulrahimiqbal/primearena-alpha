@@ -27,14 +27,18 @@ def test_roundtrip_parse_describe():
 def test_search_rediscovers_pair_bias():
     # THE PHASE GATE. pair-counting is reachable only by composing primitives.
     rng, real, null = _setup()
-    res = evolutionary_search(real, null, budget=5000, seed=0)
-    best = res.best
-    assert best.ood_auc >= 0.60
-    absorbed = null.absorb(best, real)
-    # The discovered program must capture the SAME structure: absorbing it must also
-    # explain away the hand-built pair statistic.
-    assert auc_real_vs_null(ResiduePairCount(q=10), real, absorbed,
-                            n=4000, rng=rng) <= 0.64
+    for seed in (0, 1):
+        res = evolutionary_search(real, null, budget=20000, seed=seed)
+        best = res.best
+        assert res.log.distinct_programs_evaluated >= 2000
+        assert res.log.distinct_program_shapes >= 1
+        assert res.log.sampled_fraction == "open"
+        assert best.ood_auc >= 0.60
+        absorbed = null.absorb(best, real)
+        # The discovered program must capture the SAME structure: absorbing it must also
+        # explain away the hand-built pair statistic.
+        assert auc_real_vs_null(ResiduePairCount(q=10), real, absorbed,
+                                n=4000, rng=rng) <= 0.64
 
 @pytest.mark.slow
 def test_shuffled_labels_promote_nothing():

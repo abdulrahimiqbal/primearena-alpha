@@ -10,7 +10,7 @@ import numpy as np
 from .core import Window
 from .dsl import parse_program
 from .nulls import WheelNull
-from .prereg import register, score_extrapolation
+from .prereg import register, register_prediction_interval, score_extrapolation
 from .scale import fit_templates, effect_profile
 from .sieve import primes_in
 from .stats import ResiduePairCount
@@ -116,7 +116,20 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         prereg_path = prereg_dir / f"{lead_id}.json"
         if prereg_path.exists():
             raise SystemExit(f"{prereg_path} exists; refusing to overwrite")
-        register(lead_id, args.fit_decades, pred, ci_low, ci_high, prereg_dir)
+        if str(args.interval_type).upper() == "PI":
+            largest = max(int(d) for d in args.fit_decades)
+            sampling_se = float(mean_profile[largest][1])
+            register_prediction_interval(
+                lead_id,
+                args.fit_decades,
+                pred,
+                fit_se=max(pred_sd, 1e-6),
+                sampling_se=sampling_se,
+                out_dir=prereg_dir,
+                z=float(args.z),
+            )
+        else:
+            register(lead_id, args.fit_decades, pred, ci_low, ci_high, prereg_dir)
 
         def scorer(decade: int, seed: int) -> float:
             prof = effect_profile(stat, Factory(seed, args.window_len, args.spans, args.span_len), null, [decade], args.n_per_decade, np.random.default_rng(seed))
@@ -126,7 +139,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         payload["stats"][name] = {
             "formula": stat.describe(), "seed_profiles": {str(k): {str(d): list(v) for d, v in p.items()} for k, p in seed_profiles.items()},
             "summary": _summarize(seed_profiles), "mean_profile": {str(d): list(v) for d, v in mean_profile.items()},
-            "template_fits": fits, "best_template": best, "target_seed": extrap["seed"], "extrapolation": extrap,
+            "template_fits": fits, "best_template": best, "target_seed": extrap["seed"], "target_seeds": extrap["target_seeds"], "extrapolation": extrap,
         }
     path = out / "los_scaling_results.json"
     if path.exists():
@@ -146,6 +159,8 @@ def main() -> None:
     p.add_argument("--spans", type=int, default=4)
     p.add_argument("--span-len", type=int, default=9_999_488)
     p.add_argument("--phase3-program", default="pair_hist(pairs(mod(positions(w),10),1),10)")
+    p.add_argument("--interval-type", choices=["CI", "PI"], default="CI")
+    p.add_argument("--z", type=float, default=2.0)
     args = p.parse_args()
     args.cmd = [sys.executable, "-m", "leadengine.run_los_scaling", *sys.argv[1:]]
     print(json.dumps(run(args), sort_keys=True)[:1000])

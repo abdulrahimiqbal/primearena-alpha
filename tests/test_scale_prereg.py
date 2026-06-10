@@ -3,7 +3,7 @@ import pytest
 from sympy import primerange
 from leadengine.sieve import primes_in
 from leadengine.scale import fit_templates, explained_by
-from leadengine.prereg import register, score_extrapolation, PreregError
+from leadengine.prereg import register, register_prediction_interval, score_extrapolation, PreregError
 
 def test_sieve_matches_sympy_at_1e9():
     lo, hi = 10**9, 10**9 + 10**5
@@ -54,3 +54,18 @@ def test_extrapolation_pass_and_fail():
              out_dir="prereg")
     artifact = score_extrapolation("finite_artifact", target_decade=8, observed_effect=true_target)
     assert artifact["passed"] is False
+
+def test_prediction_interval_scores_three_target_samples(tmp_path):
+    register_prediction_interval("pi_lead", [5, 6, 7], predicted_effect=0.10,
+                                 fit_se=0.003, sampling_se=0.004, z=2.0,
+                                 out_dir=tmp_path)
+    seen = []
+    def scorer(decade, seed):
+        seen.append((decade, seed))
+        return 0.10 + 0.001 * len(seen)
+    scored = score_extrapolation("pi_lead", 8, out_dir=tmp_path, scorer=scorer)
+    assert scored["interval_type"] == "PI"
+    assert scored["ci"] == pytest.approx((0.09, 0.11))
+    assert len(scored["target_seeds"]) == 3
+    assert [s for _, s in seen] == scored["target_seeds"]
+    assert scored["observed"] == pytest.approx(np.mean(scored["observed_values"]))
