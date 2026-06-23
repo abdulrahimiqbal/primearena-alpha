@@ -1,5 +1,19 @@
 # Phase 0 Notes
 
+## Distinguisher parked — known repair
+
+The science_001–004 distinguisher pipeline is parked, not dead. The observed control
+promotions are consistent with selection over a rich DSL at a fixed promotion bar, not
+with a single residual null-construction bug. Any future revival should use:
+
+- full-pipeline null calibration: promote only above the max-statistic quantile from
+  identical label-shuffled replicate searches (Westfall–Young style);
+- dimension-aware complexity costs: `pair_hist(..., q)` should cost `O(q^2)` and
+  `hist(..., q)` should cost `O(q)`, not flat constants;
+- larger OOD sets for finalist scoring.
+
+Constructor mode does no further distinguisher work in science_005.
+
 ## Architecture Summary
 
 The active lead-discovery path is `primearena.primelead`, invoked as `python -m primearena.primelead --config ... --out-dir ...`. It loads the `primelead` section from JSON config, overrides `n_min`, `n_max`, `nulls`, and `measurement_budget` from CLI flags, builds a fixed measurement set with `primearena.measurements.default_measurements`, and runs one deterministic experiment per requested null model and seed.
